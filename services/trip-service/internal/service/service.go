@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"ride-sharing/services/trip-service/internal/domain"
 	"ride-sharing/shared/types"
@@ -33,7 +34,7 @@ func (s *service) CreateTrip(ctx context.Context, fare *domain.RideFareModel) (*
 	return s.repo.CreateTrip(ctx, t)
 }
 
-func GetRoute(ctx context.Context, pickup, destination *types.Coordinate) (*types.OsrmApiResponse, error) {
+func (s *service) GetRoute(ctx context.Context, pickup, destination *types.Coordinate, useOsrmApi bool) (*types.OsrmApiResponse, error) {
 	url := fmt.Sprintf(
 		"http://router.project-osrm.org/route/v1/driving/%f,%f;%f,%f?overview=full&geometries=geojson",
 		pickup.Longitude, pickup.Latitude,
@@ -50,6 +51,8 @@ func GetRoute(ctx context.Context, pickup, destination *types.Coordinate) (*type
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the response %v", err)
 	}
+
+	log.Printf("Got response from OSRM API %s", string(body))
 
 	var routeResp types.OsrmApiResponse
 	if err := json.Unmarshal(body, &routeResp); err != nil {
