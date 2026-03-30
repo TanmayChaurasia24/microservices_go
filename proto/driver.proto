@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+package driver;
+
+option go_package = "shared/proto/driver;driver";
