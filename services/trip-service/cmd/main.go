@@ -1,26 +1,49 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
-	tripHttp "ride-sharing/services/trip-service/internal/infrastructure/http"
+	"net"
+	"os"
+	"os/signal"
 	"ride-sharing/services/trip-service/internal/infrastructure/repository"
 	"ride-sharing/services/trip-service/internal/service"
+	"syscall"
+
+	grpcserver "google.golang.org/grpc"
 )
+
+var GrpcAddr = ":9093"
 
 func main() {
 	inmemRepo := repository.NewInmemRepository()
 	svc := service.NewService(inmemRepo)
-	mux := http.NewServeMux()
 
-	handler := &tripHttp.HttpHandler{
-		Service: svc,
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+		<-sigCh
+		cancel()
+	}()
+
+	lis, err := net.Listen("tcp", GrpcAddr)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
 	}
 
-	mux.HandleFunc("POST /preview", handler.HandleTripPreview)
+	grpcServer := grpcserver.NewServer()
+	log.Printf("starting grpc server trip service on port %s", lis.Addr().String())
 
-	log.Println("Starting Trip Service API on :8083")
-	if err := http.ListenAndServe(":8083", mux); err != nil {
-		log.Fatalf("failed to start server: %v", err)
-	}
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Printf("failed to server: %v", err)
+			cancel()
+		}
+	}()
+
+	<-ctx.Done()
+	grpcServer.GracefulStop()
 }
